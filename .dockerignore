@@ -1,0 +1,18 @@
+# Deny the entire build context, then include application source explicitly.
+**
+!Dockerfile
+!requirements.txt
+!app.py
+!core.py
+!research.py
+!public_search.py
+!publication_dates.py
+!settings.py
+!google_docs_sync.py
+!visuals.py
+!access_control.py
+!ai_client.py
+!STYLE_GUIDE.md
+!deploy/
+deploy/*
+!deploy/entrypoint.py

@@ -1,0 +1,31 @@
+services:
+  studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fric-law-content-studio:local
+    restart: unless-stopped
+    init: true
+    environment:
+      PORT: "8501"
+      FRIC_WORKSPACE: /data
+      FRIC_AUTH_REQUIRED: "1"
+      FRIC_HOSTED: "1"
+      FRIC_ACCESS_PASSWORD_HASH: ${FRIC_ACCESS_PASSWORD_HASH:?Configure the access hash in .env.deploy first}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      AIBOX_API_KEY: ${AIBOX_API_KEY:-}
+      AIBOX_MODEL: ${AIBOX_MODEL:-deepseek-v4.1-flash}
+    ports:
+      - "127.0.0.1:8502:8501"
+    volumes:
+      - studio_data:/data
+    deploy:
+      replicas: 1
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 45s
+
+volumes:
+  studio_data:

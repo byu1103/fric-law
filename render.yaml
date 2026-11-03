@@ -1,0 +1,33 @@
+# Creating this Blueprint provisions PAID hosting and a persistent disk.
+# Review the provider's current billing summary before confirming creation.
+services:
+  - type: web
+    name: fric-law-content-studio
+    runtime: docker
+    region: singapore
+    plan: 0.5c-512mb
+    numInstances: 1
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: "off"
+    healthCheckPath: /_stcore/health
+    maxShutdownDelaySeconds: 45
+    disk:
+      name: fric-editorial-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: FRIC_WORKSPACE
+        value: /data
+      - key: FRIC_AUTH_REQUIRED
+        value: "1"
+      - key: FRIC_HOSTED
+        value: "1"
+      - key: FRIC_ACCESS_PASSWORD_HASH
+        sync: false
+      - key: AIBOX_MODEL
+        value: deepseek-v4.1-flash
+# Optional AIBOX_API_KEY and TAVILY_API_KEY belong in Render's secret environment
+# settings after creation. Never add key values to this Blueprint.
