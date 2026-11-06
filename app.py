@@ -30,6 +30,7 @@ from core import (  # noqa: E402
     CATEGORIES,
     DOMAINS,
     MASTER,
+    QUICK_SEARCH_PRESETS,
     TOPICS,
     WORKSPACE,
     append_master_docx,
@@ -140,6 +141,20 @@ def new_draft():
 
 def use_topic_query(category):
     st.session_state['search_query'] = TOPICS[category]
+    st.session_state['search_preset_pill'] = None
+
+
+def apply_preset_keyword():
+    chosen = st.session_state.get('search_preset_pill')
+    if chosen and chosen in QUICK_SEARCH_PRESETS:
+        st.session_state['search_query'] = QUICK_SEARCH_PRESETS[chosen]
+
+
+def on_search_query_change():
+    chosen = st.session_state.get('search_preset_pill')
+    current = st.session_state.get('search_query', '')
+    if chosen and QUICK_SEARCH_PRESETS.get(chosen) != current:
+        st.session_state['search_preset_pill'] = None
 
 
 def source_connection_details(diagnostics):
@@ -195,6 +210,14 @@ def search_page(sources):
         value=None,
         key='search_query',
         placeholder='Ví dụ: vốn đầu tư Trung Quốc, M&A, tài khoản DICA, khu công nghiệp…',
+        on_change=on_search_query_change,
+    )
+    st.pills(
+        'Từ khóa gợi ý có sẵn (bấm để điền nhanh):',
+        list(QUICK_SEARCH_PRESETS.keys()),
+        key='search_preset_pill',
+        on_change=apply_preset_keyword,
+        help='Bấm vào từ khóa mẫu để tự động điền vào ô tìm kiếm mà không mất thời gian gõ lại.',
     )
     st.button(
         'Dùng từ khóa gợi ý cho chủ đề đã chọn',
@@ -1267,6 +1290,7 @@ def main():
         'search_end',
         'search_sites',
         'search_category',
+        'search_preset_pill',
         'search_provider',
     ):
         if key in st.session_state:

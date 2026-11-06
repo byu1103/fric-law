@@ -24,6 +24,7 @@ from research import (
     OFFICIAL as OFFICIAL,
     CATEGORIES,
     TOPICS as TOPICS,
+    QUICK_SEARCH_PRESETS as QUICK_SEARCH_PRESETS,
     TZ,
     today_vn,
     canonical,

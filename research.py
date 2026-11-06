@@ -77,6 +77,19 @@ TOPICS = {
     CATEGORIES[4]: 'mua bán sáp nhập vốn góp cổ phần doanh nghiệp nhà đầu tư nước ngoài',
     CATEGORIES[5]: 'thủ tục đầu tư tranh chấp lao động giấy phép doanh nghiệp nước ngoài Việt Nam',
 }
+QUICK_SEARCH_PRESETS = {
+    '🏢 Doanh nghiệp Trung Quốc': 'doanh nghiệp Trung Quốc',
+    '🤝 Trung - Việt': 'đầu tư Trung Quốc - Việt Nam',
+    '🌏 Đầu tư nước ngoài': 'đầu tư nước ngoài',
+    '📈 FDI': 'FDI',
+    '💼 M&A / Sáp nhập': 'mua bán sáp nhập M&A',
+    '🏭 Khu công nghiệp': 'khu công nghiệp nhà xưởng',
+    '🏦 Ngoại hối & DICA': 'tài khoản vốn DICA ngoại hối',
+    '📜 Chính sách & Luật mới': 'luật nghị định thông tư mới đầu tư',
+    '💰 Thuế & Ưu đãi': 'thuế ưu đãi đầu tư',
+    '👷 Giấy phép lao động': 'thủ tục giấy phép lao động visa chuyên gia',
+    '⚡ Năng lượng & Công nghệ': 'năng lượng sạch bán dẫn công nghệ cao',
+}
 _TRACKING_KEYS = {
     'fbclid',
     'gclid',

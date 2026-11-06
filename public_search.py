@@ -86,7 +86,7 @@ _STOP_WORDS = {
 }
 # Editorial query aliases only; these do not translate or substantiate articles.
 _THEMES = (
-    ('trung quoc', 'china', 'chinese', '中国', '中资'),
+    ('trung quoc', 'china', 'chinese', '中国', '中资', 'trung viet', 'viet trung'),
     ('dau tu', 'investment', 'investor', '投资'),
     ('fdi', 'dau tu nuoc ngoai', 'foreign investment', '外商投资'),
     (

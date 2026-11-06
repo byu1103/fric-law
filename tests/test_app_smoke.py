@@ -210,6 +210,23 @@ class TestEditorialAppSmoke(unittest.TestCase):
         self.assertFalse(any((item.key or '').startswith('save_hit_') for item in app.button))
         self.assertEqual(app.text_input(key='search_query').value, 'dự án Việt Nam')
 
+    def test_quick_search_presets_populate_and_reset_query(self):
+        app = self.app()
+        self.assertEqual(app.text_input(key='search_query').value, core.TOPICS[core.CATEGORIES[1]])
+        app.pills(key='search_preset_pill').select('📈 FDI').run()
+        self.assertFalse(app.exception, str(app.exception))
+        self.assertEqual(app.text_input(key='search_query').value, 'FDI')
+        app.pills(key='search_preset_pill').select('🤝 Trung - Việt').run()
+        self.assertEqual(app.text_input(key='search_query').value, 'đầu tư Trung Quốc - Việt Nam')
+        app.button(key='use_topic_query').click().run()
+        self.assertEqual(app.text_input(key='search_query').value, core.TOPICS[core.CATEGORIES[1]])
+        self.assertIsNone(app.pills(key='search_preset_pill').value)
+        # Custom input resets preset selection
+        app.pills(key='search_preset_pill').select('📈 FDI').run()
+        self.assertEqual(app.text_input(key='search_query').value, 'FDI')
+        app.text_input(key='search_query').set_value('tùy chỉnh khác').run()
+        self.assertIsNone(app.pills(key='search_preset_pill').value)
+
     def test_missing_ai_key_disables_generation_and_keeps_manual_writing(self):
         sid = core.store_source(
             {'url': 'https://chinhphu.vn/test-manual-draft', 'title': 'Nguồn cho bài viết tay'},
