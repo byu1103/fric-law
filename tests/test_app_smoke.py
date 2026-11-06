@@ -216,16 +216,21 @@ class TestEditorialAppSmoke(unittest.TestCase):
         app.pills(key='search_preset_pill').select('📈 FDI').run()
         self.assertFalse(app.exception, str(app.exception))
         self.assertEqual(app.text_input(key='search_query').value, 'FDI')
+        # Multi-select combines keywords
         app.pills(key='search_preset_pill').select('🤝 Trung - Việt').run()
+        self.assertEqual(app.text_input(key='search_query').value, 'FDI đầu tư Trung Quốc - Việt Nam')
+        # Unselecting one keyword keeps the remaining ones
+        app.pills(key='search_preset_pill').unselect('📈 FDI').run()
         self.assertEqual(app.text_input(key='search_query').value, 'đầu tư Trung Quốc - Việt Nam')
+        # Reset to topic defaults
         app.button(key='use_topic_query').click().run()
         self.assertEqual(app.text_input(key='search_query').value, core.TOPICS[core.CATEGORIES[1]])
-        self.assertIsNone(app.pills(key='search_preset_pill').value)
+        self.assertEqual(app.pills(key='search_preset_pill').value, [])
         # Custom input resets preset selection
         app.pills(key='search_preset_pill').select('📈 FDI').run()
         self.assertEqual(app.text_input(key='search_query').value, 'FDI')
         app.text_input(key='search_query').set_value('tùy chỉnh khác').run()
-        self.assertIsNone(app.pills(key='search_preset_pill').value)
+        self.assertEqual(app.pills(key='search_preset_pill').value, [])
 
     def test_missing_ai_key_disables_generation_and_keeps_manual_writing(self):
         sid = core.store_source(

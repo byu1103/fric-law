@@ -141,20 +141,28 @@ def new_draft():
 
 def use_topic_query(category):
     st.session_state['search_query'] = TOPICS[category]
-    st.session_state['search_preset_pill'] = None
+    st.session_state['search_preset_pill'] = []
 
 
 def apply_preset_keyword():
-    chosen = st.session_state.get('search_preset_pill')
-    if chosen and chosen in QUICK_SEARCH_PRESETS:
-        st.session_state['search_query'] = QUICK_SEARCH_PRESETS[chosen]
+    chosen = st.session_state.get('search_preset_pill') or []
+    if isinstance(chosen, str):
+        chosen = [chosen]
+    if chosen:
+        parts = [QUICK_SEARCH_PRESETS[item] for item in chosen if item in QUICK_SEARCH_PRESETS]
+        st.session_state['search_query'] = ' '.join(parts)
+    else:
+        st.session_state['search_query'] = ''
 
 
 def on_search_query_change():
-    chosen = st.session_state.get('search_preset_pill')
+    chosen = st.session_state.get('search_preset_pill') or []
+    if isinstance(chosen, str):
+        chosen = [chosen]
     current = st.session_state.get('search_query', '')
-    if chosen and QUICK_SEARCH_PRESETS.get(chosen) != current:
-        st.session_state['search_preset_pill'] = None
+    expected = ' '.join(QUICK_SEARCH_PRESETS[item] for item in chosen if item in QUICK_SEARCH_PRESETS)
+    if current != expected:
+        st.session_state['search_preset_pill'] = []
 
 
 def source_connection_details(diagnostics):
@@ -205,6 +213,7 @@ def search_page(sources):
     category = category or CATEGORIES[1]
     # Changing a chip must not silently replace an editor's typed keywords.
     st.session_state.setdefault('search_query', TOPICS[category])
+    st.session_state.setdefault('search_preset_pill', [])
     query = st.text_input(
         'Bạn đang tìm thông tin gì?',
         value=None,
@@ -213,11 +222,12 @@ def search_page(sources):
         on_change=on_search_query_change,
     )
     st.pills(
-        'Từ khóa gợi ý có sẵn (bấm để điền nhanh):',
+        'Từ khóa gợi ý có sẵn (chọn nhiều cùng lúc):',
         list(QUICK_SEARCH_PRESETS.keys()),
+        selection_mode='multi',
         key='search_preset_pill',
         on_change=apply_preset_keyword,
-        help='Bấm vào từ khóa mẫu để tự động điền vào ô tìm kiếm mà không mất thời gian gõ lại.',
+        help='Bấm chọn một hoặc nhiều từ khóa mẫu để tự động kết hợp vào ô tìm kiếm mà không mất thời gian gõ lại.',
     )
     st.button(
         'Dùng từ khóa gợi ý cho chủ đề đã chọn',
