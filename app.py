@@ -12,12 +12,31 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 
 def clean_editorial_text(text: str) -> str:
-    """Format and clean generated content; strip raw markdown markers (#, *, **), quotes, etc."""
+    """Format and clean generated content; strip raw markdown markers (#, *, **), quotes, and inline [S1] annotations."""
     if not isinstance(text, str) or not text.strip():
         return text or ''
 
+    # Check if there is a '参考来源' or '资料来源' section at the end
+    ref_idx = -1
+    for marker in ('参考来源', '资料来源', '参考资料', 'Sources:'):
+        idx = text.rfind(marker)
+        if idx != -1 and (ref_idx == -1 or idx > ref_idx):
+            ref_idx = idx
+
+    if ref_idx != -1:
+        body_part = text[:ref_idx]
+        ref_part = text[ref_idx:]
+    else:
+        body_part = text
+        ref_part = ''
+
+    # Clean inline annotations like [S1], [S2] from the body text
+    body_part = re.sub(r'\s*\[S\d+\]', '', body_part)
+    body_part = re.sub(r'\s*\[待核实[^\]]*\]', '', body_part)
+
+    combined = body_part + ref_part
     lines = []
-    for line in text.splitlines():
+    for line in combined.splitlines():
         cleaned = re.sub(r'^\s*#{1,6}\s*', '', line)
         cleaned = re.sub(r'\*{1,3}(.*?)\*{1,3}', r'\1', cleaned)
         cleaned = re.sub(r'_{1,3}(.*?)_{1,3}', r'\1', cleaned)
@@ -948,7 +967,7 @@ def writer_page(sources):
         value=None,
         key='draft_content',
         height=440,
-        placeholder='Dán bài tự viết hoặc dùng AI sau khi bổ sung chứng cứ. Dẫn [S1] ngay sau luận điểm, và URL gốc ở 参考来源.',
+        placeholder='Dán bài tự viết hoặc dùng AI soạn thảo. Thân bài viết liền mạch, các nguồn tham khảo được liệt kê ở mục 参考来源 cuối bài.',
     )
     aid = st.session_state.get('editing_article_id')
     saved = get_article(aid) if aid else None

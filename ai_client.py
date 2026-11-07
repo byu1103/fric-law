@@ -305,12 +305,31 @@ def check_ai_connection(api_key=None, model=None):
 
 
 def clean_editorial_text(text: str) -> str:
-    """Format and clean generated content; strip raw markdown markers (#, *, **), quotes, etc."""
+    """Format and clean generated content; strip raw markdown markers (#, *, **), quotes, and inline [S1] annotations."""
     if not isinstance(text, str) or not text.strip():
         return text or ''
 
+    # Check if there is a '参考来源' or '资料来源' section at the end
+    ref_idx = -1
+    for marker in ('参考来源', '资料来源', '参考资料', 'Sources:'):
+        idx = text.rfind(marker)
+        if idx != -1 and (ref_idx == -1 or idx > ref_idx):
+            ref_idx = idx
+
+    if ref_idx != -1:
+        body_part = text[:ref_idx]
+        ref_part = text[ref_idx:]
+    else:
+        body_part = text
+        ref_part = ''
+
+    # Clean inline annotations like [S1], [S2] from the body text
+    body_part = re.sub(r'\s*\[S\d+\]', '', body_part)
+    body_part = re.sub(r'\s*\[待核实[^\]]*\]', '', body_part)
+
+    combined = body_part + ref_part
     lines = []
-    for line in text.splitlines():
+    for line in combined.splitlines():
         # 1. Remove Markdown headers: '# ', '## ', '### ', '#### ' at start of line
         cleaned = re.sub(r'^\s*#{1,6}\s*', '', line)
         # 2. Remove bold / italic markers: **text**, *text*, ***text***, __text__

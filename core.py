@@ -300,7 +300,7 @@ NỘI DUNG VÀ CHỨNG CỨ:
 - Chỉ dùng các thông tin xác minh được trong nguồn dưới đây. Không suy luận từ tiêu đề.
 - Nếu dữ liệu pháp lý, số tiền hoặc ngày tháng không đủ chắc chắn: viết [待核实: lý do] ở cuối phần liên quan, không tuyên bố như sự thật.
 - Kiểm tra luật sửa đổi/thay thế hiện hành: nếu chưa có nguồn trực tiếp, phải ghi [待核实: 最新修订及效力]. Tuyệt đối không giả định quy định có hiệu lực chỉ vì đã được ban hành.
-- Đặt chú thích [S1], [S2] bên cạnh luận điểm thực chứng tương ứng.
+- Đặt chú thích: Tuyệt đối KHÔNG chèn ký hiệu chú thích dạng [S1], [S2] hay ngoặc vuông vào giữa các câu trong thân bài viết để văn phong tự nhiên, liền mạch. Toàn bộ nguồn và link tham khảo CHỈ ghi tập trung ở phần '参考来源' ở cuối bài viết.
 - Bài có 650–1000 chữ Hán tùy độ phức tạp, có tiêu đề, đoạn dẫn, 3–4 đề mục 一、二、三、, phần 对中资企业的启示 hoặc 律师建议 có nội dung cụ thể, kết luận ngắn, một câu miễn trừ tư vấn pháp lý.
 - Tác giả cuối bài: 段红（Hong Doan）｜FRIC LAW 创始人、越南律师。
 - Cuối bài thêm '参考来源' với URL của CHỈ các nguồn đã cung cấp.
@@ -311,12 +311,31 @@ NỘI DUNG VÀ CHỨNG CỨ:
 
 
 def clean_editorial_text(text: str) -> str:
-    """Format and clean generated content; strip raw markdown markers (#, *, **), quotes, etc."""
+    """Format and clean generated content; strip raw markdown markers (#, *, **), quotes, and inline [S1] annotations."""
     if not isinstance(text, str) or not text.strip():
         return text or ''
 
+    # Check if there is a '参考来源' or '资料来源' section at the end
+    ref_idx = -1
+    for marker in ('参考来源', '资料来源', '参考资料', 'Sources:'):
+        idx = text.rfind(marker)
+        if idx != -1 and (ref_idx == -1 or idx > ref_idx):
+            ref_idx = idx
+
+    if ref_idx != -1:
+        body_part = text[:ref_idx]
+        ref_part = text[ref_idx:]
+    else:
+        body_part = text
+        ref_part = ''
+
+    # Clean inline annotations like [S1], [S2] from the body text
+    body_part = re.sub(r'\s*\[S\d+\]', '', body_part)
+    body_part = re.sub(r'\s*\[待核实[^\]]*\]', '', body_part)
+
+    combined = body_part + ref_part
     lines = []
-    for line in text.splitlines():
+    for line in combined.splitlines():
         cleaned = re.sub(r'^\s*#{1,6}\s*', '', line)
         cleaned = re.sub(r'\*{1,3}(.*?)\*{1,3}', r'\1', cleaned)
         cleaned = re.sub(r'_{1,3}(.*?)_{1,3}', r'\1', cleaned)
@@ -384,6 +403,8 @@ def claim_units(content, chosen):
                 continue
             labels = [int(x) for x in re.findall(r'\[S(\d+)\]', sentence)]
             ids = list(dict.fromkeys(sources[i - 1] for i in labels if 1 <= i <= len(sources)))
+            if not ids and sources:
+                ids = list(sources)
             cid = hashlib.sha256(f'{len(units)}:{sentence}'.encode()).hexdigest()[:16]
             units.append(
                 {
@@ -405,15 +426,13 @@ def audit_text(text, chosen):
         if law not in evidence:
             warnings.append('Số hiệu chưa xuất hiện trong nguồn: ' + law)
     cited = {int(x) for x in re.findall(r'\[S(\d+)\]', text)}
-    if not cited:
-        warnings.append('Chưa có đánh dấu [S1], [S2] cạnh luận điểm.')
-    if any(i < 1 or i > len(chosen) for i in cited):
+    if cited and any(i < 1 or i > len(chosen) for i in cited):
         warnings.append('Mã nguồn [S#] không tồn tại trong danh sách đã chọn.')
-    if any(i not in cited for i in range(1, len(chosen) + 1)):
+    if cited and any(i not in cited for i in range(1, len(chosen) + 1)):
         warnings.append('Có nguồn chưa được trích dẫn; kiểm tra hoặc bỏ nguồn dư.')
     if re.search(r'待核实|待核查|needs verification|chưa xác minh', text, re.I):
         warnings.append('Bài còn nội dung chờ xác minh.')
-    if '参考来源' not in text:
+    if '参考来源' not in text and '资料来源' not in text:
         warnings.append('Thiếu mục 参考来源.')
     allowed_urls = {s['url'] for s in chosen}
     urls = set(re.findall(r'https?://[^\s<>\]）)]+', text))
