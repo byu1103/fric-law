@@ -380,8 +380,13 @@ def search_page(sources):
             or win != (str(start), str(end))
         ):
             st.info('Bộ lọc đã thay đổi. Danh sách dưới đây vẫn thuộc lần tìm trước; bấm Tìm để cập nhật.')
-        for warning in diagnostics.get('warnings', []):
-            st.warning(error_text(warning))
+        if not clusters:
+            for warning in diagnostics.get('warnings', []):
+                st.warning(error_text(warning))
+        elif diagnostics.get('warnings'):
+            with st.expander('Lưu ý về nguồn tìm kiếm', expanded=False):
+                for warning in diagnostics.get('warnings', []):
+                    st.caption('• ' + error_text(warning))
         if diagnostics.get('coverage_note'):
             st.caption(error_text(diagnostics['coverage_note']))
         source_connection_details(diagnostics)
