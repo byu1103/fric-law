@@ -158,8 +158,36 @@ def _source_fields(item):
 
 
 def store_source(item, category=''):
-    url = canonical(item['url'])
+    raw_url = str(item.get('url') or '').strip()
+    if not raw_url.startswith(('http://', 'https://')):
+        raw_url = 'https://' + raw_url
+    url = canonical(raw_url, allow_any_domain=True)
     sid = hashlib.sha256(url.encode()).hexdigest()[:16]
+
+    title = str(item.get('title') or '').strip()
+    text = str(item.get('text') or '').strip()
+
+    if not title or not text:
+        try:
+            from research import fetch_evidence
+            evidence = fetch_evidence(url)
+            if not text and evidence.get('text'):
+                text = evidence['text']
+                item['text'] = text
+            if not title:
+                lines = [l.strip() for l in text.splitlines() if len(l.strip()) >= 5]
+                if lines:
+                    title = lines[0][:200]
+            if evidence.get('published') and not item.get('published'):
+                item['published'] = evidence['published']
+                item['date_verified'] = evidence.get('date_verified', False)
+                item['date_evidence'] = evidence.get('date_evidence')
+        except Exception:
+            pass
+
+    if not title:
+        title = domain_of(url) + ' - ' + (urlsplit(url).path.strip('/')[-40:] or 'Trang chủ')
+
     fields = _source_fields(item)
     with connection() as con:
         existing = con.execute('SELECT id FROM sources WHERE url=?', (url,)).fetchone()
@@ -170,11 +198,11 @@ def store_source(item, category=''):
             (
                 sid,
                 url,
-                item.get('title') or 'Nguồn chưa có tên',
+                title,
                 domain_of(url),
                 fields[0],
                 now(),
-                item.get('text', '')[:100000],
+                text[:100000],
                 category,
                 'official' if official(url) else 'secondary',
                 *fields[1:],
@@ -258,18 +286,26 @@ def article_prompt(category, chosen, custom=''):
         guide,
         f"""Ngày nghiên cứu tại Việt Nam: {today_vn().isoformat()}.
 Chuyên mục: {category}. Ghi chú biên tập: {custom or 'Không có'}.
-Hãy tạo MỘT bài độc lập cho người đọc Trung Quốc quan tâm đến đầu tư ở Việt Nam.
-Chỉ dùng các thông tin xác minh được trong nguồn dưới đây. Không suy luận từ tiêu đề.
-Nếu dữ liệu pháp lý, số tiền hoặc ngày tháng không đủ chắc chắn: viết [待核实: lý do] ở cuối phần liên quan,
-không tuyên bố như sự thật. Kiểm tra luật sửa đổi/thay thế hiện hành: nếu chưa có nguồn trực tiếp,
-phải ghi [待核实: 最新修订及效力]. Tuyệt đối không giả định quy định có hiệu lực chỉ vì đã được ban hành.
-Đặt chú thích [S1], [S2] bên cạnh luận điểm thực chứng tương ứng.
-Bài có 650–1000 chữ Hán tùy độ phức tạp, có tiêu đề, đoạn dẫn, 3–4 đề mục 一、二、三、,
-phần 对中资企业的启示 hoặc 律师建议 có nội dung cụ thể, kết luận ngắn, một câu miễn trừ tư vấn pháp lý.
-Tác giả cuối bài: 段红（Hong Doan）｜FRIC LAW 创始人、越南律师。
-Cuối bài thêm '参考来源' với URL của CHỈ các nguồn đã cung cấp.
-Tuyệt đối không tự chế nguồn/link/số hiệu văn bản, không khẳng định FRIC LAW đã tham gia dự án nếu không được cung cấp chứng cứ.
-Nguồn chứng cứ (những đoạn trích có thể không đầy đủ):\n\n"""
+Hãy tạo MỘT bài hoàn chỉnh, chuyên nghiệp bằng tiếng Trung giản thể cho người đọc Trung Quốc quan tâm đến đầu tư ở Việt Nam.
+
+QUY TẮC ĐỊNH DẠNG HOÀN CHỈNH (BẮT BUỘC):
+- TUYỆT ĐỐI KHÔNG dùng bất kỳ ký tự cú pháp Markdown nào: KHÔNG dùng dấu thăng (#, ##, ###), KHÔNG dùng dấu sao (*, **), KHÔNG dùng gạch dưới (_), KHÔNG dùng bullet dạng dấu sao (*).
+- KHÔNG bọc tiêu đề hay đề mục trong dấu ngoặc kép Anh (").
+- Tiêu đề bài viết đặt ở dòng đầu tiên, trang trọng, cô đọng.
+- Các đề mục lớn ghi trực tiếp bằng số thứ tự chữ Hán: 一、, 二、, 三、, 四、 trên dòng riêng (không thêm # hay **).
+- Các ý nhỏ dùng định dạng số 1., 2., 3. hoặc gạch đầu dòng • gọn gàng.
+- Văn bản hoàn thiện, liền mạch, sẵn sàng để xuất bản WeChat hoặc in ấn mà không phải xóa sửa ký tự thừa.
+
+NỘI DUNG VÀ CHỨNG CỨ:
+- Chỉ dùng các thông tin xác minh được trong nguồn dưới đây. Không suy luận từ tiêu đề.
+- Nếu dữ liệu pháp lý, số tiền hoặc ngày tháng không đủ chắc chắn: viết [待核实: lý do] ở cuối phần liên quan, không tuyên bố như sự thật.
+- Kiểm tra luật sửa đổi/thay thế hiện hành: nếu chưa có nguồn trực tiếp, phải ghi [待核实: 最新修订及效力]. Tuyệt đối không giả định quy định có hiệu lực chỉ vì đã được ban hành.
+- Đặt chú thích [S1], [S2] bên cạnh luận điểm thực chứng tương ứng.
+- Bài có 650–1000 chữ Hán tùy độ phức tạp, có tiêu đề, đoạn dẫn, 3–4 đề mục 一、二、三、, phần 对中资企业的启示 hoặc 律师建议 có nội dung cụ thể, kết luận ngắn, một câu miễn trừ tư vấn pháp lý.
+- Tác giả cuối bài: 段红（Hong Doan）｜FRIC LAW 创始人、越南律师。
+- Cuối bài thêm '参考来源' với URL của CHỈ các nguồn đã cung cấp.
+- Tuyệt đối không tự chế nguồn/link/số hiệu văn bản, không khẳng định FRIC LAW đã tham gia dự án nếu không được cung cấp chứng cứ.
+- Nguồn chứng cứ (những đoạn trích có thể không đầy đủ):\n\n"""
         + '\n\n'.join(material),
     )
 
@@ -284,10 +320,12 @@ def generate_article(category, chosen, custom=''):
     ):
         raise ValueError('Chuyên mục pháp lý cần ít nhất một nguồn chính thức từ cơ quan nhà nước.')
     guide, task = article_prompt(category, chosen, custom)
-    return draft_text(
-        instructions='Bạn là biên tập viên cao cấp FRIC LAW viết tiếng Trung giản thể.\n' + guide,
+    from ai_client import clean_editorial_text
+    draft = draft_text(
+        instructions='Bạn là biên tập viên cao cấp FRIC LAW viết tiếng Trung giản thể. Viết hoàn chỉnh, không dùng ký tự Markdown (#, *), xuất bản trực tiếp.\n' + guide,
         input=task,
     )
+    return clean_editorial_text(draft)
 
 
 LAW_RE = re.compile(

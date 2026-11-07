@@ -20,11 +20,15 @@ from settings import (
 
 def _active_provider():
     p = os.getenv('AI_PROVIDER', '').strip().lower()
-    if p in ('gemini', 'aibox'):
-        return p
-    if os.getenv('GEMINI_API_KEY', '').strip() and not os.getenv('AIBOX_API_KEY', '').strip():
+    if p == 'gemini':
         return 'gemini'
-    return 'aibox'
+    if p == 'aibox':
+        return 'aibox'
+    if os.getenv('GEMINI_API_KEY', '').strip():
+        return 'gemini'
+    if os.getenv('AIBOX_API_KEY', '').strip():
+        return 'aibox'
+    return 'gemini'
 
 
 def _configuration(api_key=None, model=None):
@@ -300,7 +304,33 @@ def check_ai_connection(api_key=None, model=None):
     return {'ok': True, 'model': selected, 'provider': _active_provider()}
 
 
+def clean_editorial_text(text: str) -> str:
+    """Format and clean generated content; strip raw markdown markers (#, *, **), quotes, etc."""
+    if not isinstance(text, str) or not text.strip():
+        return text or ''
+
+    lines = []
+    for line in text.splitlines():
+        # 1. Remove Markdown headers: '# ', '## ', '### ', '#### ' at start of line
+        cleaned = re.sub(r'^\s*#{1,6}\s*', '', line)
+        # 2. Remove bold / italic markers: **text**, *text*, ***text***, __text__
+        cleaned = re.sub(r'\*{1,3}(.*?)\*{1,3}', r'\1', cleaned)
+        cleaned = re.sub(r'_{1,3}(.*?)_{1,3}', r'\1', cleaned)
+        # 3. Clean raw markdown bullets (* or +) at start of line to neat bullets
+        cleaned = re.sub(r'^\s*[\*\+]\s+', '• ', cleaned)
+        # 4. Remove stray quotes wrapping whole line
+        cleaned = cleaned.strip()
+        if (cleaned.startswith('"') and cleaned.endswith('"')) or (cleaned.startswith("'") and cleaned.endswith("'")):
+            cleaned = cleaned[1:-1].strip()
+        cleaned = cleaned.replace('```', '')
+        lines.append(cleaned)
+
+    result = '\n'.join(lines)
+    result = re.sub(r'\n{3,}', '\n\n', result)
+    return result.strip()
+
+
 def draft_text(instructions, input):
     """Return a completed text draft; refusals/partial output never become drafts."""
     text, _ = _request(instructions, input)
-    return text
+    return clean_editorial_text(text)

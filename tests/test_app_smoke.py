@@ -366,7 +366,7 @@ class TestEditorialAppSmoke(unittest.TestCase):
         self.assertEqual(app.text_area(key='draft_content').value, '测试连接保留的中文草稿')
 
     def test_ai_generation_uses_actual_adapter_and_leaves_draft_unapproved(self):
-        body = '# 越南投资观察\n一、项目进展\n请核实原始来源。[S1]\n律师建议：核查审批条件。\n免责声明：本文不构成个案法律意见。\n参考来源\nhttps://chinhphu.vn/test-ai-source'
+        body = '越南投资观察\n一、项目进展\n请核实原始来源。[S1]\n律师建议：核查审批条件。\n免责声明：本文不构成个案法律意见。\n参考来源\nhttps://chinhphu.vn/test-ai-source'
         with patch('openai.OpenAI') as client:
             app, sid = self.ready_ai_writer()
             client.assert_not_called()

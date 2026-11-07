@@ -6,7 +6,7 @@ import json
 import os
 import re
 from time import perf_counter
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import streamlit as st
@@ -240,11 +240,59 @@ def search_page(sources):
     st.session_state.setdefault('search_start', default_start)
     st.session_state.setdefault('search_end', default_end)
     st.session_state.setdefault('search_sites', [d for d in PRIORITY if d in DOMAINS])
-    left, right, settings = st.columns([1, 1, 2])
-    start = left.date_input('Từ ngày', value=None, max_value=today_vn(), key='search_start')
-    end = right.date_input('Đến ngày', value=None, max_value=today_vn(), key='search_end')
-    with settings:
-        sites = st.multiselect('Nguồn ưu tiên', DOMAINS, key='search_sites')
+
+    today = today_vn()
+    col_preset, col_start, col_end = st.columns([1.5, 1, 1])
+    preset_choice = col_preset.selectbox(
+        'Khoảng thời gian',
+        [
+            '7 ngày gần đây',
+            '30 ngày gần đây',
+            '90 ngày gần đây',
+            '1 năm gần đây',
+            'Tất cả thời gian (Không giới hạn)',
+            'Tùy chọn ngày cụ thể',
+        ],
+        key='search_date_preset',
+    )
+    if preset_choice == '7 ngày gần đây':
+        preset_start = today - timedelta(days=6)
+        preset_end = today
+    elif preset_choice == '30 ngày gần đây':
+        preset_start = today - timedelta(days=29)
+        preset_end = today
+    elif preset_choice == '90 ngày gần đây':
+        preset_start = today - timedelta(days=89)
+        preset_end = today
+    elif preset_choice == '1 năm gần đây':
+        preset_start = today - timedelta(days=365)
+        preset_end = today
+    elif preset_choice == 'Tất cả thời gian (Không giới hạn)':
+        preset_start = date(2000, 1, 1)
+        preset_end = today
+    else:
+        preset_start = st.session_state.get('search_start', default_start)
+        preset_end = st.session_state.get('search_end', default_end)
+
+    start = col_start.date_input('Từ ngày', value=preset_start, max_value=today, key='search_start')
+    end = col_end.date_input('Đến ngày', value=preset_end, max_value=today, key='search_end')
+
+    col_sites, col_btn1, col_btn2 = st.columns([3, 1, 1])
+    with col_btn1:
+        st.write('')
+        st.write('')
+        if st.button('Chọn tất cả', key='select_all_sources', use_container_width=True):
+            st.session_state['search_sites'] = list(DOMAINS)
+            st.rerun()
+    with col_btn2:
+        st.write('')
+        st.write('')
+        if st.button('Bỏ chọn', key='clear_all_sources', use_container_width=True):
+            st.session_state['search_sites'] = []
+            st.rerun()
+    with col_sites:
+        st.session_state.setdefault('search_sites', [d for d in PRIORITY if d in DOMAINS])
+        sites = st.multiselect('Nguồn tìm kiếm', DOMAINS, key='search_sites')
     st.caption(
         'Asia/Ho_Chi_Minh · 7 ngày lịch mặc định, bao gồm hôm nay. Chỉ ngày đăng gốc có chứng cứ mới được tính trong khoảng ngày; ngày sửa bài và ngày ban hành luật được tách riêng.'
     )
@@ -381,17 +429,23 @@ def search_page(sources):
                 for i, hit in enumerate(pending):
                     hit_card(hit, result_category, f'pending_{i}')
     st.divider()
-    with st.expander('＋ Thêm URL gốc vào thư viện', expanded=not sources):
+    with st.expander('＋ Thêm URL bài viết hoặc nguồn mới vào thư viện', expanded=not sources):
         with st.form('add_source'):
-            url = st.text_input('URL gốc', placeholder='https://vanban.chinhphu.vn/…')
-            title = st.text_input('Tên nguồn', placeholder='Tiêu đề bản tin hoặc văn bản')
-            submit = st.form_submit_button('Lưu URL')
+            url = st.text_input('URL bài viết / nguồn', placeholder='https://... (dán bất kỳ link bài viết nào)')
+            title = st.text_input('Tên nguồn (tùy chọn)', placeholder='Để trống sẽ tự động trích xuất tiêu đề từ trang web')
+            custom_text = st.text_area('Nội dung trích đoạn (tùy chọn)', placeholder='Dán nội dung bài viết nếu trang có tường lửa / không cho đọc tự động', height=100)
+            submit = st.form_submit_button('Lưu vào Thư viện', type='primary')
         if submit:
             try:
-                if not title.strip():
-                    raise ValueError('Nhập tên nguồn để dễ đối chiếu.')
-                sid = store_source({'url': url, 'title': title.strip()}, category)
-                flash(f'Đã lưu nguồn {sid}. Mở Thư viện nguồn để bổ sung chứng cứ.')
+                if not url.strip():
+                    raise ValueError('Vui lòng nhập đường dẫn URL.')
+                payload = {'url': url.strip()}
+                if title.strip():
+                    payload['title'] = title.strip()
+                if custom_text.strip():
+                    payload['text'] = custom_text.strip()
+                sid = store_source(payload, category)
+                flash(f'Đã lưu thành công nguồn ({sid}) vào Thư viện!')
                 st.rerun()
             except Exception as exc:
                 st.error(error_text(exc))
@@ -661,12 +715,12 @@ def ai_connection_panel():
         generation_error = {}
         st.session_state.pop('_ai_generation_error', None)
     with st.expander(
-        'Kết nối AI Box',
+        'Kết nối Google Gemini AI',
         expanded=not config['configured'] or checked.get('ok') is False or bool(generation_error),
     ):
         if not config['configured']:
             st.info(
-                'Chưa có khóa AI Box API. Tạo khóa để bật AI soạn thảo; bạn vẫn có thể viết, '
+                'Chưa có khóa AI Box API hoặc Google Gemini API. Tạo khóa để bật AI soạn thảo; bạn vẫn có thể viết, '
                 'dán, lưu và duyệt bản thảo tiếng Trung bên dưới.'
             )
         elif generation_error:
@@ -681,25 +735,20 @@ def ai_connection_panel():
             st.info(f'Đã lưu cấu hình · {config["model"]} · chưa kiểm tra kết nối.')
         if not config['configured']:
             st.markdown(
-                '1. Đăng nhập [AI Box](https://home.ai-box.vn/console/token), mở **API Keys** và tạo khóa mới.\n'
-                '2. Kiểm tra số dư, hạn mức và tên model khả dụng trong tài khoản AI Box.\n'
-                '3. Lưu khóa bằng ô mật khẩu trên máy quản trị hoặc công cụ cấu hình trên Mac. '
-                'Không gửi khóa qua chat hoặc bản thảo.'
+                '1. Mở [Google AI Studio](https://aistudio.google.com/apikey) (hoặc tài khoản AI Box), mở **API Keys** và tạo khóa mới.\n'
+                '2. Kiểm tra số dư, hạn mức và tên model khả dụng trong tài khoản AI Box hoặc Google Gemini.\n'
+                '3. Dán khóa vào ô bên dưới rồi bấm **Lưu kết nối AI**. Không chia sẻ khóa công khai.'
             )
-        st.caption(
-            'AI soạn thảo trên website chỉ gọi AI Box. Cấu hình này không thay đổi cấu hình hoặc hạn mức '
-            'ChatGPT/Codex trong cuộc trò chuyện của bạn.'
-        )
-        st.caption('Endpoint cố định · Chat Completions · tương thích OpenAI SDK')
+        st.caption('Cổng kết nối AI API (Google Gemini hoặc AI Box tương thích OpenAI):')
         st.code(config['base_url'], language=None)
         if shared:
             st.caption(
-                'Bạn đang dùng khu vực biên tập qua link chia sẻ. Quản trị viên cần chạy '
-                'setup_ai.py trên Mac/máy chủ để nhập khóa; link này không cho thay đổi khóa hoặc model.'
+                'Ứng dụng đang chạy ở chế độ máy chủ/Streamlit Cloud. Khóa API và model được quản lý qua biến môi trường hoặc setup_ai.py.'
             )
         else:
             st.caption(
-                'Chỉ nhập trên máy quản trị. Khóa được lưu cục bộ trong .env và không được điền lại vào giao diện.'
+                'Chỉ nhập trên máy quản trị. Khóa được lưu cục bộ trong .env và không được điền lại vào giao diện. '
+                'Thao tác này không thay đổi cấu hình hoặc hạn mức ChatGPT/Codex riêng của bạn.'
             )
             if (
                 st.session_state.get('_ai_form_revision') != config['revision']
@@ -708,31 +757,22 @@ def ai_connection_panel():
                 st.session_state['ai_model'] = config['model']
                 st.session_state['_ai_form_revision'] = config['revision']
             with st.form('ai_connection_settings', clear_on_submit=True):
-                provider_idx = 0 if config['provider'] == 'gemini' else 1
-                provider_sel = st.radio(
-                    'Chọn nhà cung cấp AI',
-                    ['Google Gemini (Miễn phí - Khuyên dùng)', 'AI Box'],
-                    index=provider_idx,
-                    horizontal=True,
-                    key='ai_provider_sel',
-                )
-                is_gemini = 'Gemini' in provider_sel
                 key = st.text_input('Khóa API mới (Google Gemini hoặc AI Box)', type='password', key='ai_aibox_key')
-                model = st.text_input('Model AI', key='ai_model')
+                model = st.text_input('Model AI', key='ai_model', placeholder='gemini-2.5-flash hoặc deepseek-v4.1-flash')
                 st.caption(
-                    '• Google Gemini: Lấy khóa miễn phí tại [aistudio.google.com](https://aistudio.google.com/apikey) (Model: gemini-3.5-flash hoặc gemini-3.5-flash-lite).\n'
-                    '• AI Box: Quản lý khóa tại [home.ai-box.vn](https://home.ai-box.vn/console/token) (Model: qwen3.8-max-0902, deepseek-v4.1-flash, v.v.).'
+                    '• Lấy khóa miễn phí tại [aistudio.google.com](https://aistudio.google.com/apikey).\n'
+                    '• Model khuyên dùng: gemini-2.5-flash hoặc gemini-1.5-flash.'
                 )
                 save = st.form_submit_button('Lưu kết nối AI', type='primary')
             if save:
                 try:
                     raw_key = key.strip()
-                    if raw_key.startswith('AIza') or (is_gemini and not raw_key.startswith('sk-')):
-                        saved_config = save_ai_settings(gemini_key=raw_key or None, model=model, provider='gemini')
-                    else:
+                    if raw_key.startswith('sk-'):
                         saved_config = save_ai_settings(aibox_key=raw_key or None, model=model, provider='aibox')
+                    else:
+                        saved_config = save_ai_settings(gemini_key=raw_key or None, model=model, provider='gemini')
                     st.session_state['_ai_settings_notice'] = (
-                        'Đã lưu cấu hình AI. Bấm Kiểm tra kết nối AI; không cần khởi động lại.'
+                        'Đã lưu cấu hình Google Gemini. Bấm Kiểm tra kết nối AI; không cần khởi động lại.'
                         if saved_config['configured']
                         else 'Đã lưu model. Cần thêm khóa API để kết nối và soạn bài.'
                     )
@@ -750,7 +790,7 @@ def ai_connection_panel():
             reload_local_settings()
             st.rerun()
         st.caption(
-            'Kiểm tra kết nối gửi một yêu cầu API nhỏ có thể phát sinh phí; không gửi nguồn hoặc bản thảo.'
+            'Kiểm tra kết nối gửi một yêu cầu API nhỏ tới Google Gemini.'
         )
         if probe.button(
             'Kiểm tra kết nối AI',
@@ -758,7 +798,7 @@ def ai_connection_panel():
             disabled=not config['configured'],
             use_container_width=True,
         ):
-            with st.spinner('Đang kiểm tra kết nối AI Box…'):
+            with st.spinner('Đang kiểm tra kết nối Google Gemini…'):
                 try:
                     check_ai_connection(model=config['model'])
                     result = {'ok': True}
@@ -767,7 +807,7 @@ def ai_connection_panel():
                 except Exception:
                     result = {
                         'ok': False,
-                        'message': 'Không kiểm tra được kết nối AI. Kiểm tra cấu hình và thử lại.',
+                        'message': 'Không kiểm tra được kết nối Gemini. Kiểm tra khóa API và thử lại.',
                     }
                 st.session_state['_ai_check'] = {
                     'revision': config['revision'],
@@ -840,7 +880,7 @@ def writer_page(sources):
         st.caption('Nguồn đã đủ điều kiện để yêu cầu AI soạn nháp; điều này chưa xác minh nội dung nguồn.')
     st.caption(
         'Khi bấm AI soạn bài tiếng Trung, nội dung nguồn đã chọn và ghi chú biên tập sẽ được gửi '
-        'tới AI Box để tạo bản nháp. Chỉ chọn tài liệu bạn được phép gửi.'
+        'tới Google Gemini AI để tạo bản nháp hoàn chỉnh. Chỉ chọn tài liệu bạn được phép gửi.'
     )
     if st.button(
         'AI soạn bài tiếng Trung',
@@ -850,16 +890,16 @@ def writer_page(sources):
     ):
         with st.spinner('Đang viết theo STYLE_GUIDE và các nguồn đã chọn…'):
             try:
-                content = generate_article(category, selected, custom)
+                from ai_client import clean_editorial_text
+                content = clean_editorial_text(generate_article(category, selected, custom))
                 st.session_state['draft_content'] = content
-                st.session_state['draft_title'] = next(
-                    (line.lstrip('# ').strip() for line in content.splitlines() if line.strip()), ''
-                )
+                first_line = next((line for line in content.splitlines() if line.strip()), '')
+                st.session_state['draft_title'] = clean_editorial_text(first_line)
                 st.session_state.pop('_ai_generation_error', None)
                 # A successful draft is a more recent service result than a failed probe.
                 st.session_state.pop('_ai_check', None)
                 flash(
-                    'AI đã tạo bản nháp. Nội dung này chưa được xác minh độc lập; cần đối chiếu từng luận điểm.'
+                    'AI đã tạo bài viết hoàn chỉnh (không có ký tự Markdown thô). Nội dung này chưa được xác minh độc lập; cần đối chiếu từng luận điểm.'
                 )
                 st.rerun()
             except AIServiceError as exc:

@@ -16,7 +16,7 @@ KEYS = ('TAVILY_API_KEY', 'AIBOX_API_KEY')
 AIBOX_BASE_URL = 'https://api.ai-box.vn/v1'
 GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/'
 DEFAULT_MODEL = 'deepseek-v4.1-flash'
-DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite'
+DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash'
 
 
 @contextmanager
@@ -51,6 +51,14 @@ def reload_local_settings():
         for name in (*KEYS, 'GEMINI_API_KEY', 'AIBOX_MODEL', 'GEMINI_MODEL', 'AI_PROVIDER'):
             if name in values and values[name] is not None:
                 os.environ[name] = values[name]
+    try:
+        import streamlit as _st
+        if hasattr(_st, 'secrets'):
+            for key in ('GEMINI_API_KEY', 'GEMINI_MODEL', 'AI_PROVIDER', 'TAVILY_API_KEY', 'FRIC_WORKSPACE'):
+                if key in _st.secrets and key not in os.environ:
+                    os.environ[key] = str(_st.secrets[key])
+    except Exception:
+        pass
 
 
 def load_startup_settings():
@@ -76,16 +84,8 @@ def get_ai_settings():
     gemini_key = os.getenv('GEMINI_API_KEY', '').strip()
     aibox_key = os.getenv('AIBOX_API_KEY', '').strip()
 
-    if raw_provider == 'gemini':
+    if raw_provider == 'gemini' or gemini_key:
         provider = 'gemini'
-    elif raw_provider == 'aibox':
-        provider = 'aibox'
-    elif gemini_key and not aibox_key:
-        provider = 'gemini'
-    else:
-        provider = 'aibox'
-
-    if provider == 'gemini':
         key = gemini_key
         model = os.getenv('GEMINI_MODEL', '').strip() or DEFAULT_GEMINI_MODEL
         base_url = GEMINI_BASE_URL
@@ -125,6 +125,10 @@ def save_ai_settings(aibox_key=None, model=None, provider=None, gemini_key=None)
         p = str(provider).strip().lower()
         if p in ('gemini', 'aibox'):
             changes['AI_PROVIDER'] = p
+    elif gemini_key is not None:
+        changes['AI_PROVIDER'] = 'gemini'
+    elif aibox_key is not None:
+        changes['AI_PROVIDER'] = 'aibox'
     if aibox_key is not None:
         changes['AIBOX_API_KEY'] = _validated_key(aibox_key)
     if gemini_key is not None:

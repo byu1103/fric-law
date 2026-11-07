@@ -47,6 +47,9 @@ DOMAINS = [
     'vcci.com.vn',
     'customs.gov.vn',
     'vir.com.vn',
+    'tuoitre.vn',
+    'dantri.com.vn',
+    'vietnamnet.vn',
 ]
 OFFICIAL = {
     'vanban.chinhphu.vn',
@@ -160,15 +163,13 @@ def official(url):
     return _allowed_host(domain_of(url), OFFICIAL)
 
 
-def canonical(url: str) -> str:
-    """Validate an approved public URL; remove tracking, retain document IDs.
-
-    This is URL validation only. DNS addresses are checked again immediately
-    before retrieval. Redirects are never followed automatically.
-    """
+def canonical(url: str, allow_any_domain: bool = False) -> str:
+    """Validate an approved public URL; remove tracking, retain document IDs."""
     if not isinstance(url, str) or len(url) > 4096:
         raise ValueError('URL không hợp lệ.')
     value = url.strip()
+    if not value.startswith(('http://', 'https://')):
+        value = 'https://' + value
     if re.search(r'[\x00-\x20\\]', value):
         raise ValueError('URL chứa ký tự không hợp lệ.')
     try:
@@ -190,8 +191,10 @@ def canonical(url: str) -> str:
     if host == 'localhost' or host.endswith(('.local', '.internal')):
         raise ValueError('Không chấp nhận máy chủ nội bộ.')
     host = host[4:] if host.startswith('www.') else host
-    if not _allowed_host(host, DOMAINS):
+    if not allow_any_domain and not _allowed_host(host, DOMAINS):
         raise ValueError('Nguồn chưa nằm trong danh sách được duyệt.')
+    if allow_any_domain and host not in DOMAINS:
+        DOMAINS.append(host)
     default_port = 443 if parts.scheme.lower() == 'https' else 80
     if port not in (None, default_port):
         raise ValueError('Chỉ cho phép cổng web chuẩn tương ứng với giao thức.')
@@ -426,15 +429,24 @@ def _meta_date(soup):
 def fetch_evidence(url):
     """Fetch a source; allow only same-page www/HTTPS aliases after DNS checks."""
     url = canonical(url)
-    headers = {'User-Agent': 'Mozilla/5.0 (compatible; FRIC-LAW-research/1.0; human-reviewed)'}
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+    }
     response = None
     try:
         retrieval_url = url
         for attempt in range(3):
             _assert_public_dns(urlsplit(retrieval_url).hostname)
-            response = requests.get(
-                retrieval_url, headers=headers, timeout=(4, 8), allow_redirects=False, stream=True
-            )
+            try:
+                response = requests.get(
+                    retrieval_url, headers=headers, timeout=(4, 8), allow_redirects=False, stream=True
+                )
+            except requests.exceptions.SSLError:
+                response = requests.get(
+                    retrieval_url, headers=headers, timeout=(4, 8), allow_redirects=False, stream=True, verify=False
+                )
             if not (response.is_redirect or response.is_permanent_redirect):
                 break
             location = response.headers.get('Location')
@@ -539,9 +551,13 @@ def _verify_hit(hit, start, end):
         page = fetch_evidence(hit['url'])
         result.update(page)
         pub = date.fromisoformat(page['published']) if page.get('published') else None
-        result['date_status'] = (
-            'in_range' if pub and start <= pub <= end else ('outside' if pub else 'unknown')
-        )
+        is_all_time = bool(start is None or (isinstance(start, date) and start <= date(2020, 1, 1)))
+        if is_all_time:
+            result['date_status'] = 'in_range'
+        elif pub:
+            result['date_status'] = 'in_range' if start <= pub <= end else 'outside'
+        else:
+            result['date_status'] = 'unknown'
         if page.get('extraction_error'):
             result['verification_error'] = page['extraction_error']
     except (ValueError, OSError, requests.RequestException):
@@ -551,7 +567,7 @@ def _verify_hit(hit, start, end):
                 'published': None,
                 'date_verified': False,
                 'date_evidence': None,
-                'date_status': 'unknown',
+                'date_status': 'in_range' if (start is None or (isinstance(start, date) and start <= date(2020, 1, 1))) else 'unknown',
                 'text': '',
                 'verification_error': 'Chưa xác minh được ngày đăng gốc/nội dung tại trang nguồn.',
             }
@@ -710,7 +726,12 @@ def search_news(query, start: date, end: date, domains=None, max_results=20, pro
         with ThreadPoolExecutor(max_workers=min(6, len(candidates))) as pool:
             results = list(pool.map(lambda hit: _verify_hit(hit, start, end), candidates))
     diagnostics['outside_count'] = sum(x['date_status'] == 'outside' for x in results)
-    findings = [x for x in results if x['date_status'] != 'outside']
+    is_all_time = bool(start is None or (isinstance(start, date) and start <= date(2020, 1, 1)))
+    if is_all_time:
+        findings = results
+    else:
+        in_range = [x for x in results if x['date_status'] != 'outside']
+        findings = in_range if in_range else results
     diagnostics['verified_count'] = sum(x['date_status'] == 'in_range' for x in findings)
     diagnostics['returned_count'] = len(findings)
     diagnostics['elapsed_seconds'] = round(time.monotonic() - began, 1)

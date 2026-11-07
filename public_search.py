@@ -35,18 +35,28 @@ PUBLIC_SOURCES = (
     ('vietnamplus.vn', 'rss', 'https://www.vietnamplus.vn/rss/kinhte-311.rss'),
     ('vneconomy.vn', 'rss', 'https://vneconomy.vn/dau-tu.rss'),
     ('vneconomy.vn', 'rss', 'https://vneconomy.vn/tai-chinh.rss'),
+    ('tuoitre.vn', 'rss', 'https://tuoitre.vn/rss/kinh-doanh.rss'),
+    ('dantri.com.vn', 'rss', 'https://dantri.com.vn/rss/kinh-doanh.rss'),
+    ('vietnamnet.vn', 'rss', 'https://vietnamnet.vn/rss/kinh-doanh.rss'),
     ('baodautu.vn', 'index', 'https://baodautu.vn/'),
+    ('vir.com.vn', 'index', 'https://vir.com.vn/'),
+    ('vcci.com.vn', 'index', 'https://vcci.com.vn/'),
     ('vanban.chinhphu.vn', 'index', 'https://vanban.chinhphu.vn/'),
     ('congbao.chinhphu.vn', 'index', 'https://congbao.chinhphu.vn/'),
     ('sbv.gov.vn', 'index', 'https://sbv.gov.vn/vi/trang-chu'),
     ('mof.gov.vn', 'index', 'https://mof.gov.vn/'),
+    ('mpi.gov.vn', 'index', 'https://www.mpi.gov.vn/'),
     ('vbpl.vn', 'index', 'https://vbpl.vn/Pages/portal.aspx'),
     ('vbpl.moj.gov.vn', 'index', 'https://vbpl.moj.gov.vn/Pages/portal.aspx'),
     ('thuvienphapluat.vn', 'index', 'https://thuvienphapluat.vn/phap-luat/thoi-su-phap-luat'),
 )
 _MAX_BYTES = 1_500_000
-_SCAN_SECONDS = 12
-_HEADERS = {'User-Agent': 'Mozilla/5.0 (compatible; FRIC-LAW-research/1.0; human-reviewed)'}
+_SCAN_SECONDS = 15
+_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+}
 _DNS_LOCKS = {urlsplit(url).hostname: Lock() for _, _, url in PUBLIC_SOURCES}
 _ERROR_LABELS = {
     'dns_unverified': 'Chưa xác minh được DNS công khai; kiểm tra VPN/DNS.',
@@ -308,6 +318,19 @@ def _request(url, deadline):
                     continue
                 break
             except requests.exceptions.SSLError:
+                if host and host.endswith('.gov.vn'):
+                    try:
+                        response = requests.get(
+                            url,
+                            headers=_HEADERS,
+                            timeout=(min(3, remaining), min(6, remaining)),
+                            allow_redirects=False,
+                            stream=True,
+                            verify=False,
+                        )
+                        break
+                    except Exception:
+                        pass
                 raise
             except (requests.Timeout, requests.ConnectionError):
                 if attempt or deadline - time.monotonic() < 1:
@@ -402,7 +425,15 @@ def _is_article_url(url):
         return '/tin-tuc/' in path or '/chi-tiet' in path
     if host == 'thuvienphapluat.vn':
         return bool(re.search(r'-\d+\.html$', path))
-    return False
+    if host == 'vir.com.vn':
+        return bool(re.search(r'-\d+\.html$', path)) or '/news/' in path
+    if host == 'vcci.com.vn':
+        return '/tin-tuc/' in path or bool(re.search(r'-\d+\.html$', path))
+    if host in ('mpi.gov.vn', 'moj.gov.vn', 'customs.gov.vn'):
+        return bool(re.search(r'\.(?:aspx|html|htm|jsp)', path)) and path not in ('/', '/default.aspx', '/index.jsp')
+    if host in ('tuoitre.vn', 'dantri.com.vn', 'vietnamnet.vn'):
+        return bool(re.search(r'-\d+\.htm', path))
+    return bool(re.search(r'-\d+\.html?$', path)) or (len(path.strip('/').split('/')) >= 2 and not path.endswith(('.css', '.js', '.png', '.jpg', '.svg')))
 
 
 def _parse_index(raw, base_url):
@@ -532,11 +563,11 @@ def discover_public(query, start, end, domains, max_results=20):
         failed_domains = {item['domain'] for item in diagnostics['failed_sources']}
         fully_failed = sorted(failed_domains - successful_domains)
         partial = sorted(failed_domains & successful_domains)
-        if fully_failed:
+        if fully_failed and not diagnostics['providers_succeeded']:
             diagnostics['warnings'].append(
                 'Chưa đọc được nguồn: '
                 + ', '.join(fully_failed)
-                + '. Xem chi tiết kết nối hoặc thêm URL gốc thủ công.'
+                + '. Bạn có thể thêm URL bài viết thủ công ở bên dưới.'
             )
         if partial:
             diagnostics['warnings'].append(
