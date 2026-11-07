@@ -11,6 +11,26 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
+def clean_editorial_text(text: str) -> str:
+    """Format and clean generated content; strip raw markdown markers (#, *, **), quotes, etc."""
+    if not isinstance(text, str) or not text.strip():
+        return text or ''
+
+    lines = []
+    for line in text.splitlines():
+        cleaned = re.sub(r'^\s*#{1,6}\s*', '', line)
+        cleaned = re.sub(r'\*{1,3}(.*?)\*{1,3}', r'\1', cleaned)
+        cleaned = re.sub(r'_{1,3}(.*?)_{1,3}', r'\1', cleaned)
+        cleaned = re.sub(r'^\s*\*\s+', '- ', cleaned)
+        cleaned = cleaned.strip()
+        if (cleaned.startswith('"') and cleaned.endswith('"')) or (cleaned.startswith('“') and cleaned.endswith('”')):
+            cleaned = cleaned[1:-1].strip()
+        lines.append(cleaned)
+
+    cleaned_body = '\n'.join(lines)
+    cleaned_body = re.sub(r'\n{3,}', '\n\n', cleaned_body)
+    return cleaned_body.strip()
+
 from access_control import require_access, remote_access_required
 from ai_client import AIServiceError, check_ai_connection
 from settings import (
@@ -895,7 +915,6 @@ def writer_page(sources):
     ):
         with st.spinner('Đang viết theo STYLE_GUIDE và các nguồn đã chọn…'):
             try:
-                from ai_client import clean_editorial_text
                 content = clean_editorial_text(generate_article(category, selected, custom))
                 st.session_state['draft_content'] = content
                 first_line = next((line for line in content.splitlines() if line.strip()), '')

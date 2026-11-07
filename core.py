@@ -310,6 +310,27 @@ NỘI DUNG VÀ CHỨNG CỨ:
     )
 
 
+def clean_editorial_text(text: str) -> str:
+    """Format and clean generated content; strip raw markdown markers (#, *, **), quotes, etc."""
+    if not isinstance(text, str) or not text.strip():
+        return text or ''
+
+    lines = []
+    for line in text.splitlines():
+        cleaned = re.sub(r'^\s*#{1,6}\s*', '', line)
+        cleaned = re.sub(r'\*{1,3}(.*?)\*{1,3}', r'\1', cleaned)
+        cleaned = re.sub(r'_{1,3}(.*?)_{1,3}', r'\1', cleaned)
+        cleaned = re.sub(r'^\s*\*\s+', '- ', cleaned)
+        cleaned = cleaned.strip()
+        if (cleaned.startswith('"') and cleaned.endswith('"')) or (cleaned.startswith('“') and cleaned.endswith('”')):
+            cleaned = cleaned[1:-1].strip()
+        lines.append(cleaned)
+
+    cleaned_body = '\n'.join(lines)
+    cleaned_body = re.sub(r'\n{3,}', '\n\n', cleaned_body)
+    return cleaned_body.strip()
+
+
 def generate_article(category, chosen, custom=''):
     if not chosen:
         raise ValueError('Hãy chọn nguồn trước.')
@@ -320,7 +341,6 @@ def generate_article(category, chosen, custom=''):
     ):
         raise ValueError('Chuyên mục pháp lý cần ít nhất một nguồn chính thức từ cơ quan nhà nước.')
     guide, task = article_prompt(category, chosen, custom)
-    from ai_client import clean_editorial_text
     draft = draft_text(
         instructions='Bạn là biên tập viên cao cấp FRIC LAW viết tiếng Trung giản thể. Viết hoàn chỉnh, không dùng ký tự Markdown (#, *), xuất bản trực tiếp.\n' + guide,
         input=task,
